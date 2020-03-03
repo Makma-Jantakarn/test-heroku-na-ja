@@ -1,51 +1,40 @@
 # app.py
-from flask import Flask, request, jsonify
+# git push heroku master
+from flask import Flask, request, jsonify, make_response
+import sqlite3
+
 app = Flask(__name__)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 
-@app.route('/getmsg/', methods=['GET'])
-def respond():
-    # Retrieve the name from url parameter
-    name = request.args.get("name", None)
+@app.route('/update', methods=["POST"])
+def update():
+    payload = request.get_json(force=True)
+    print(payload)
+    with sqlite3.connect('example.db') as db:
+        c = db.cursor()
+        c.execute('INSERT INTO data(humidity, temperature) VALUES(?, ?)', (payload['humidity'], payload['temperature']))
+        db.commit()
+    return make_response('OK', 200)
 
-    # For debugging
-    print(f"got name {name}")
-
-    response = {}
-
-    # Check if user sent a name at all
-    if not name:
-        response["ERROR"] = "no name found, please send a name."
-    # Check if the user entered a number not a name
-    elif str(name).isdigit():
-        response["ERROR"] = "name can't be numeric."
-    # Now the user entered a valid name
-    else:
-        response["MESSAGE"] = f"Welcome {name} to our awesome platform!!"
-
-    # Return the response in json format
-    return jsonify(response)
-
-@app.route('/post/', methods=['POST'])
-def post_something():
-    param = request.form.get('name')
-    print(param)
-    # You can add the test cases you made in the previous function, but in our case here you are just testing the POST functionality
-    if param:
-        return jsonify({
-            "Message": f"Welcome {name} to our awesome platform!!",
-            # Add this option to distinct the POST request
-            "METHOD" : "POST"
-        })
-    else:
-        return jsonify({
-            "ERROR": "no name found, please send a name."
-        })
-
-# A welcome message to test our server
-@app.route('/')
-def index():
-    return "<h1>Welcome to our server !!</h1>"
+@app.route('/query', methods=['GET'])
+def query():
+    with sqlite3.connect('example.db') as db:
+        c = db.cursor()
+        c.execute('SELECT * FROM data')
+        records = c.fetchall()
+        results = []
+        for r in records:
+            results.append({'timestamp':r[1], 'humidity':r[2], 'temperature':r[3]})
+        db.commit()
+    return jsonify(results)
 
 if __name__ == '__main__':
-    # Threaded option to enable multiple instances for multiple user access support
-    app.run(threaded=True, port=5000)
+    with sqlite3.connect('example.db') as db:
+        c = db.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS data
+              (_id INTEGER PRIMARY KEY AUTOINCREMENT,
+               timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+               humidity FLOAT NOT NULL,
+               temperature FLOAT NOT NULL)''')
+        db.commit()
+    app.run(debug=True)
