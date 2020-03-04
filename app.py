@@ -1,40 +1,65 @@
-# app.py
-# git push heroku master
-from flask import Flask, request, jsonify, make_response
-import sqlite3
+from flask import Flask, request, jsonify
+import os
+import psycopg2
+import dj_database_url
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 @app.route('/update', methods=["POST"])
-def update():
+def input():
     payload = request.get_json(force=True)
-    print(payload)
-    with sqlite3.connect('example.db') as db:
-        c = db.cursor()
-        c.execute('INSERT INTO data(humidity, temperature) VALUES(?, ?)', (payload['humidity'], payload['temperature']))
-        db.commit()
-    return make_response('OK', 200)
+    temp = payload['tempre']
+    humid = payload['humid']
+    print(temp,humid)
+    DATABASE_URL = os.environ['DATABASE_URL']
+    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+    c = conn.cursor()
+    c.execute('INSERT INTO records(temp,humid) VALUES(%s, %s);' % (temp,humid))
+    conn.commit()
+    conn.close()
+    resp = {'status':'OK'}
+    return jsonify(resp)
 
-@app.route('/query', methods=['GET'])
-def query():
-    with sqlite3.connect('example.db') as db:
-        c = db.cursor()
-        c.execute('SELECT * FROM data')
-        records = c.fetchall()
-        results = []
-        for r in records:
-            results.append({'timestamp':r[1], 'humidity':r[2], 'temperature':r[3]})
-        db.commit()
-    return jsonify(results)
+@app.route('/update', methods=["GET"])
+def getinput():
+    temp = request.args.get('temp')
+    humid = request.args.get('humid')
+    print(temp,humid)
+    DATABASE_URL = os.environ['DATABASE_URL']
+    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+    c = conn.cursor()
+    c.execute('INSERT INTO records(temp,humid) VALUES(%s, %s);' % (temp,humid))
+    conn.commit()
+    conn.close()
+    resp = {'status':'OK'}
+    return jsonify(resp)
 
+@app.route('/query')
+def summary():
+    name = request.args.get('time')
+    DATABASE_URL = os.environ['DATABASE_URL']
+    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+    c = conn.cursor()
+    c.execute('SELECT * FROM records')
+    records = c.fetchall()
+    results = []
+    for r in records:
+        results.append({'timestamp':r[1], 'temp':r[2], 'humid':r[3]})
+    conn.commit()
+    conn.close()
+    resp = {'status':'OK', 'results':results}
+    return jsonify(resp)
+	
 if __name__ == '__main__':
-    with sqlite3.connect('example.db') as db:
-        c = db.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS data
-              (_id INTEGER PRIMARY KEY AUTOINCREMENT,
-               timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-               humidity FLOAT NOT NULL,
-               temperature FLOAT NOT NULL)''')
-        db.commit()
-    app.run(debug=True)
+    DATABASE_URL = os.environ['DATABASE_URL']
+    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS records
+             (_id INTEGER PRIMARY KEY AUTOINCREMENT,
+             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+             temp REAL,
+             humid REAL)''')
+    conn.commit()
+    conn.close()
+    app.run(debug=True, port=8000)
